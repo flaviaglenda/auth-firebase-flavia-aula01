@@ -39,6 +39,14 @@ const PaginaPrincipal = ({ navigation }) => {
                 <Text style={styles.textoBotao}>Carregar fotos</Text>
             </Pressable>
 
+            <Pressable style={styles.botao} onPress={() => navigation.navigate('ListarVideos')}>
+                <Text style={styles.textoBotao}>Listar vídeos</Text>
+            </Pressable>
+
+            <Pressable style={styles.botao} onPress={() => navigation.navigate('UploadVideos')}>
+                <Text style={styles.textoBotao}>Carregar vídeos</Text>
+            </Pressable>
+
             <Pressable style={[styles.botao, styles.botaoLogout]} onPress={() => navigation.navigate('RealizarLogin')}>
                 <Text style={styles.textoBotaoSair}>Sair</Text>
             </Pressable>
