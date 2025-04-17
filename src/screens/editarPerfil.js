@@ -1,79 +1,63 @@
 // Flávia Glenda Guimarães Carvalho
 import React, { useState, useEffect } from "react";
-import {
-    View,
-    Text,
-    TextInput,
-    Image,
-    Pressable,
-    StyleSheet,
-    ImageBackground,
-} from "react-native";
-import AwesomeAlert from "react-native-awesome-alerts";
+import { View, Text, TextInput, Image, Pressable, StyleSheet, ImageBackground, ActivityIndicator, } from "react-native";
+import SweetAlert from "react-native-sweet-alert";
 import * as ImagePicker from "expo-image-picker";
-import {
-    getAuth,
-    updateEmail,
-    updatePassword,
-    reauthenticateWithCredential,
-    EmailAuthProvider,
-} from "firebase/auth";
-import {
-    getFirestore,
-    doc,
-    updateDoc,
-    getDoc,
-} from "firebase/firestore";
+import { getAuth, updateEmail, updatePassword, reauthenticateWithCredential, EmailAuthProvider } from "firebase/auth";
+import { getFirestore, doc, getDoc, updateDoc } from "firebase/firestore";
 import AWS from "aws-sdk";
 import app from "../../firebaseConfig";
 import s3config from "../../awsConfig";
 
 export default function EditarPerfil({ navigation }) {
     const db = getFirestore(app);
+    const auth = getAuth();
+    const [user, setUser] = useState(null);
+
     const [nome, setNome] = useState("");
     const [novoEmail, setNovoEmail] = useState("");
     const [novaSenha, setNovaSenha] = useState("");
     const [senhaAtual, setSenhaAtual] = useState("");
     const [fotoAtual, setFotoAtual] = useState(require("../../assets/mulherr_icon.avif"));
-    const [alertVisible, setAlertVisible] = useState(false);
-    const [alertMessage, setAlertMessage] = useState("");
-    const [successAlert, setSuccessAlert] = useState(false);
-    const [user, setUser] = useState(null);
+
+    const [loading, setLoading] = useState(true);
 
     const S3_BUCKET = "bucket-storage-senai-04";
     const s3 = new AWS.S3(s3config);
 
     useEffect(() => {
-        const loadUserData = async () => {
-            const currentUser = getAuth().currentUser;
+        (async () => {
+            const currentUser = auth.currentUser;
             setUser(currentUser);
-
             if (currentUser) {
                 const userDocRef = doc(db, "users", currentUser.uid);
                 const userDoc = await getDoc(userDocRef);
-
                 if (userDoc.exists()) {
                     const data = userDoc.data();
                     setNome(data.nome || "");
                     setNovoEmail(currentUser.email || "");
-                    setFotoAtual(data.photoURL ? { uri: data.photoURL } : require("../../assets/mulherr_icon.avif"));
+                    setFotoAtual(
+                        data.photoURL ? { uri: data.photoURL } : require("../../assets/mulherr_icon.avif")
+                    );
                 }
             }
-        };
-
-        loadUserData();
+            setLoading(false);
+        })();
     }, []);
 
-    const showAlert = (message, success = false) => {
-        setAlertMessage(message);
-        setSuccessAlert(success);
-        setAlertVisible(true);
+    const showAlert = (title, message, style = "default") => {
+        SweetAlert.showAlertWithOptions({
+            title,
+            subTitle: message,
+            confirmButtonTitle: "OK",
+            style,
+        });
     };
 
     const uploadImage = async (uri) => {
         try {
-            const filename = uri.substring(uri.lastIndexOf("/") + 1);
-            const currentUser = getAuth().currentUser;
+            const filename = uri.split("/").pop();
+            const currentUser = auth.currentUser;
             const filePath = `profile_images/${currentUser.uid}/${filename}`;
 
             const response = await fetch(uri);
@@ -91,9 +75,10 @@ export default function EditarPerfil({ navigation }) {
 
             await updateDoc(doc(db, "users", currentUser.uid), { photoURL });
             setFotoAtual({ uri: photoURL });
+            showAlert("Sucesso", "Foto de perfil atualizada!", "success");
         } catch (error) {
-            console.error("Erro ao enviar imagem", error);
-            showAlert("Erro ao atualizar a foto.");
+            console.error("Erro ao enviar imagem:", error);
+            showAlert("Erro", "Não foi possível atualizar a foto.", "error");
         }
     };
 
@@ -104,45 +89,61 @@ export default function EditarPerfil({ navigation }) {
             aspect: [1, 1],
             quality: 1,
         });
-
         if (!result.canceled) {
             await uploadImage(result.assets[0].uri);
         }
     };
 
     const handleUpdateProfile = async () => {
-        const currentUser = getAuth().currentUser;
-
-        if (!currentUser) {
-            showAlert("Usuário não autenticado. Faça login novamente.");
+        if (!user) {
+            showAlert("Atenção", "Usuário não autenticado.", "error");
             return;
         }
-
         if (!senhaAtual) {
-            showAlert("Digite sua senha atual para atualizar o perfil.");
+            showAlert("Atenção", "Digite sua senha atual.", "error");
             return;
         }
 
         try {
-            const credential = EmailAuthProvider.credential(currentUser.email, senhaAtual);
-            await reauthenticateWithCredential(currentUser, credential);
+            const credential = EmailAuthProvider.credential(user.email, senhaAtual);
+            await reauthenticateWithCredential(user, credential);
 
-            await updateDoc(doc(db, "users", currentUser.uid), { nome });
+            await updateDoc(doc(db, "users", user.uid), { nome });
 
-            if (novoEmail !== currentUser.email) {
-                await updateEmail(currentUser, novoEmail);
+            if (novoEmail !== user.email) {
+                await updateEmail(user, novoEmail);
             }
 
             if (novaSenha) {
-                await updatePassword(currentUser, novaSenha);
+                await updatePassword(user, novaSenha);
             }
 
-            showAlert("Perfil atualizado com sucesso!", true);
+            showAlert("Sucesso", "Perfil atualizado com sucesso!", "success");
+            navigation.goBack();
         } catch (error) {
-            console.error("Erro ao atualizar perfil: ", error);
-            showAlert("Ocorreu um erro ao atualizar o perfil.");
+            console.error("Erro ao atualizar perfil:", error);
+            if (error.code === "auth/invalid-credential") {
+                showAlert("Erro", "Senha atual incorreta.", "error");
+            } else if (error.code === "auth/operation-not-allowed") {
+                showAlert(
+                    "Erro",
+                    "Mudança de e‑mail não permitida. Habilite Email/Password no Console Firebase.",
+                    "error"
+                );
+            } else {
+                showAlert("Erro", "Ocorreu um erro ao atualizar o perfil.", "error");
+            }
         }
     };
+
+    if (loading) {
+        return (
+            <View style={styles.background}>
+                <ActivityIndicator size="large" color="#02782e" />
+                <Text style={{ color: "#fff", marginTop: 10 }}>Carregando usuário...</Text>
+            </View>
+        );
+    }
 
     return (
         <ImageBackground
@@ -203,22 +204,6 @@ export default function EditarPerfil({ navigation }) {
                     </Pressable>
                 </View>
             </View>
-
-            <AwesomeAlert
-                show={alertVisible}
-                showProgress={false}
-                title={successAlert ? "Sucesso!" : "Atenção"}
-                message={alertMessage}
-                closeOnTouchOutside={true}
-                closeOnHardwareBackPress={false}
-                showConfirmButton={true}
-                confirmText="OK"
-                confirmButtonColor={successAlert ? "#4BB543" : "#DD6B55"}
-                onConfirmPressed={() => {
-                    setAlertVisible(false);
-                    if (successAlert) navigation.goBack();
-                }}
-            />
         </ImageBackground>
     );
 }
@@ -258,6 +243,11 @@ const styles = StyleSheet.create({
         borderRadius: 8,
         marginBottom: 20,
     },
+    textoBotao: {
+        color: "#fff",
+        fontSize: 16,
+        fontWeight: "bold",
+    },
     input: {
         width: "90%",
         backgroundColor: "#e9e5e5",
@@ -287,11 +277,6 @@ const styles = StyleSheet.create({
         borderRadius: 8,
         width: "48%",
         alignItems: "center",
-    },
-    textoBotao: {
-        color: "#fff",
-        fontSize: 16,
-        fontWeight: "bold",
     },
     textoBotaoVoltar: {
         color: "#285137",

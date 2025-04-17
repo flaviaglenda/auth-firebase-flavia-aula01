@@ -1,6 +1,7 @@
-// Flávia Glenda Guimarães Carvalho
+// firebaseConfig.js
 import { initializeApp } from "firebase/app";
 import { getFirestore, collection, getDocs } from "firebase/firestore";
+import { getAuth } from "firebase/auth";
 
 const firebaseConfig = {
   apiKey: "AIzaSyDz10ecPSg8O4fDmGcN_j4nbg4zUlOBFc0",
@@ -14,4 +15,6 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
-export { app, db, collection, getDocs };
+const auth = getAuth(app); 
+
+export { app, db, auth, collection, getDocs };
